@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kbju
+      POSTGRES_PASSWORD: kbju
+      POSTGRES_DB: kbju_tracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - kbju_pgdata:/var/lib/postgresql/data
+
+volumes:
+  kbju_pgdata:

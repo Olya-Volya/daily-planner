@@ -1,0 +1,200 @@
+// КБЖУ Трекер и Помощник Питания — схема данных
+// Пользователи, история приёмов пищи, подписки/оплаты, сохранённые рецепты.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum ActivityLevel {
+  SEDENTARY // сидячий образ жизни
+  LIGHT // лёгкая активность (1-3 тренировки/нед)
+  MODERATE // умеренная активность (3-5 тренировок/нед)
+  HIGH // высокая активность (6-7 тренировок/нед)
+  VERY_HIGH // очень высокая (физическая работа + тренировки)
+}
+
+enum Goal {
+  LOSE // похудение
+  MAINTAIN // удержание
+  GAIN // набор массы
+}
+
+enum MealSource {
+  VOICE
+  TEXT
+  MANUAL
+}
+
+enum FoodState {
+  RAW
+  COOKED
+  UNKNOWN
+}
+
+enum NutritionSource {
+  USDA
+  FATSECRET
+  LLM_FALLBACK
+}
+
+enum SubscriptionPlan {
+  MONTH
+  QUARTER
+  YEAR
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  YOOKASSA
+  TELEGRAM_STARS
+  CLOUDPAYMENTS
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id                     BigInt        @id // Telegram user id
+  telegramUsername       String?
+  firstName              String?
+  languageCode           String?
+
+  gender                 Gender?
+  age                    Int?
+  weightKg               Float?
+  heightCm               Float?
+  activityLevel          ActivityLevel?
+  goal                   Goal?
+
+  dailyCalorieTarget     Int?
+  dailyProteinTargetG    Int?
+  dailyFatTargetG        Int?
+  dailyCarbTargetG       Int?
+
+  onboardingCompleted    Boolean       @default(false)
+  onboardingStep         String? // текущий шаг мастера онбординга (если не завершён)
+
+  trialStartedAt         DateTime      @default(now())
+  trialRecognitionsUsed  Int           @default(0)
+
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  meals                  MealEntry[]
+  subscriptions          Subscription[]
+  payments               Payment[]
+  recipes                SavedRecipe[]
+
+  @@map("users")
+}
+
+model MealEntry {
+  id            String     @id @default(cuid())
+  userId        BigInt
+  user          User       @relation(fields: [userId], references: [id])
+  source        MealSource
+  rawTranscript String? // распознанный текст голосового сообщения
+  eatenAt       DateTime   @default(now())
+  createdAt     DateTime   @default(now())
+
+  items         MealItem[]
+
+  @@index([userId, eatenAt])
+  @@map("meal_entries")
+}
+
+model MealItem {
+  id               String          @id @default(cuid())
+  mealEntryId      String
+  mealEntry        MealEntry       @relation(fields: [mealEntryId], references: [id], onDelete: Cascade)
+
+  searchTerm       String // как в реплике пользователя ("овсянка")
+  matchedFoodName  String? // как найдено в базе нутриентов
+  quantityGrams    Float
+  state            FoodState       @default(UNKNOWN)
+  dataSource       NutritionSource
+  isEstimated      Boolean         @default(false) // true, если данные — LLM-фолбэк, а не официальная база
+
+  // эталонные значения на 100 г (как получены из БД нутриентов, до пересчёта на вес)
+  caloriesPer100g  Float
+  proteinPer100g   Float
+  fatPer100g       Float
+  carbsPer100g     Float
+
+  // итоговые значения для данного веса — считаются программно (calculation/nutrientCalculator.ts),
+  // а не языковой моделью, см. п.4 ТЗ "Запрет на случайную генерацию чисел"
+  calories         Float
+  protein          Float
+  fat              Float
+  carbs            Float
+
+  @@map("meal_items")
+}
+
+model Subscription {
+  id         String             @id @default(cuid())
+  userId     BigInt
+  user       User               @relation(fields: [userId], references: [id])
+  plan       SubscriptionPlan
+  status     SubscriptionStatus @default(ACTIVE)
+  startedAt  DateTime           @default(now())
+  expiresAt  DateTime
+  payment    Payment?
+
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                      String           @id @default(cuid())
+  userId                  BigInt
+  user                    User             @relation(fields: [userId], references: [id])
+  subscriptionId          String?          @unique
+  subscription            Subscription?    @relation(fields: [subscriptionId], references: [id])
+
+  provider                PaymentProvider
+  plan                    SubscriptionPlan
+  amount                  Int // в минимальных единицах валюты (копейки) либо Stars
+  currency                String
+  telegramPaymentChargeId String?
+  invoicePayload          String
+  status                  PaymentStatus    @default(PENDING)
+  createdAt               DateTime         @default(now())
+
+  @@map("payments")
+}
+
+model SavedRecipe {
+  id              String   @id @default(cuid())
+  userId          BigInt
+  user            User     @relation(fields: [userId], references: [id])
+  title           String
+  ingredientsJson Json // [{ name, grams }]
+  steps           String
+  calories        Float
+  protein         Float
+  fat             Float
+  carbs           Float
+  createdAt       DateTime @default(now())
+
+  @@map("saved_recipes")
+}
