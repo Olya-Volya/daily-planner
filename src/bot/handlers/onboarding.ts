@@ -18,6 +18,14 @@ export async function beginOnboarding(ctx: Context, userId: bigint): Promise<voi
   );
 }
 
+export async function cancelOnboarding(ctx: Context, userId: bigint): Promise<boolean> {
+  const draft = getOnboardingDraft(userId);
+  if (!draft) return false;
+  clearOnboardingDraft(userId);
+  await ctx.reply("Анкета отменена. Отправь /start, когда будешь готов(а) пройти её заново.");
+  return true;
+}
+
 /** Обрабатывает нажатия инлайн-кнопок (пол/активность/цель) в рамках онбординга. */
 export async function handleOnboardingCallback(ctx: Context, userId: bigint, data: string): Promise<boolean> {
   const draft = getOnboardingDraft(userId);
@@ -137,7 +145,7 @@ async function finishOnboarding(ctx: Context, userId: bigint, draft: OnboardingD
       `🥑 Жиры: ${targets.fatG} г`,
       `🍞 Углеводы: ${targets.carbsG} г`,
       "",
-      "Теперь просто отправь мне голосовое сообщение о том, что ты съел(а), " +
+      "Теперь просто отправь мне голосовое или текстовое сообщение о том, что ты съел(а), " +
         "или фото содержимого холодильника — и я предложу меню и посчитаю КБЖУ.",
     ].join("\n"),
   );

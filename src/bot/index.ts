@@ -12,7 +12,9 @@ import {
   handleSubscribeCommand,
   handleSuccessfulPayment,
 } from "./handlers/subscription.js";
-import { handleOnboardingCallback, handleOnboardingText } from "./handlers/onboarding.js";
+import { cancelOnboarding, handleOnboardingCallback, handleOnboardingText } from "./handlers/onboarding.js";
+import { handleTextMeal } from "./handlers/text.js";
+import { handleRecipesCommand, handleSaveRecipeCallback } from "./handlers/recipes.js";
 import { ensureAccessOrPaywall } from "./middlewares/subscriptionGuard.js";
 import type { SubscriptionPlan } from "@prisma/client";
 
@@ -52,6 +54,18 @@ export function createBot(): Telegraf {
     await handleSubscribeCommand(ctx);
   });
 
+  bot.command("recipes", async (ctx) => {
+    await handleRecipesCommand(ctx, (ctx as any).dbUser);
+  });
+
+  bot.command("cancel", async (ctx) => {
+    const user = (ctx as any).dbUser;
+    const handled = await cancelOnboarding(ctx, user.id);
+    if (!handled) {
+      await ctx.reply("Нечего отменять.");
+    }
+  });
+
   bot.on("callback_query", async (ctx) => {
     const query = ctx.callbackQuery;
     if (!query || !("data" in query) || !query.data) return;
@@ -61,6 +75,12 @@ export function createBot(): Telegraf {
     if (data.startsWith("subscribe:")) {
       const plan = data.split(":")[1] as SubscriptionPlan;
       await handlePlanSelection(ctx, user.id, plan);
+      return;
+    }
+
+    if (data.startsWith("save_recipe:")) {
+      const recipeId = data.slice("save_recipe:".length);
+      await handleSaveRecipeCallback(ctx, user, recipeId);
       return;
     }
 
@@ -100,6 +120,11 @@ export function createBot(): Telegraf {
     if (message && "text" in message && !message.text.startsWith("/")) {
       const handled = await handleOnboardingText(ctx, user.id, message.text);
       if (handled) return;
+
+      const allowed = await ensureAccessOrPaywall(ctx, user);
+      if (!allowed) return;
+      await handleTextMeal(ctx, user, message.text);
+      return;
     }
 
     return next();

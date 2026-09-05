@@ -1,10 +1,11 @@
-import type { Context } from "telegraf";
+import { Markup, type Context } from "telegraf";
 import type { User } from "@prisma/client";
 import { MenuService } from "../../services/menu/menuService.js";
 import { calculateRemainingBudget } from "../../services/calculation/nutrientCalculator.js";
 import { getTodayTotals } from "../../db/repositories/mealRepository.js";
 import { logger } from "../../utils/logger.js";
 import type { FridgeImage } from "../../services/llm/analyzeFridgePhoto.js";
+import { cacheRecipe } from "../recipeCache.js";
 
 const menuService = new MenuService();
 
@@ -106,7 +107,11 @@ async function processFridgePhotos(ctx: Context, user: User, images: FridgeImage
           `Б${recipe.totals.proteinG}/Ж${recipe.totals.fatG}/У${recipe.totals.carbsG} г`,
       ].join("\n");
 
-      await ctx.reply(text);
+      const recipeId = cacheRecipe(user.id, recipe);
+      await ctx.reply(
+        text,
+        Markup.inlineKeyboard([Markup.button.callback("💾 Сохранить рецепт", `save_recipe:${recipeId}`)]),
+      );
     }
   } catch (err) {
     logger.error({ err, userId: user.id.toString() }, "Failed to process fridge photo(s)");
