@@ -1,6 +1,6 @@
 import { loadEnv } from "./config/env.js";
 import { logger } from "./utils/logger.js";
-import { createBot } from "./bot/index.js";
+import { createBot, registerBotCommands } from "./bot/index.js";
 import { getPrismaClient } from "./db/prismaClient.js";
 import { startHealthServer } from "./healthServer.js";
 
@@ -12,6 +12,7 @@ async function main(): Promise<void> {
 
   const healthServer = startHealthServer(env.PORT);
   const bot = createBot();
+  await registerBotCommands(bot).catch((err) => logger.error({ err }, "Failed to register bot commands"));
 
   process.once("SIGINT", () => {
     bot.stop("SIGINT");

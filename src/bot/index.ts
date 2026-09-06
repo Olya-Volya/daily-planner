@@ -18,6 +18,24 @@ import { handleDeleteItemCallback, isDeleteItemCallback, sendTodayItemsList } fr
 import { ensureAccessOrPaywall } from "./middlewares/subscriptionGuard.js";
 import type { SubscriptionPlan } from "@prisma/client";
 
+/**
+ * Регистрирует список команд в Telegram (кнопка "/" / значок меню рядом с
+ * полем ввода) — так пользователю не нужно запоминать команды наизусть:
+ * Telegram сам покажет список с описаниями и подставит автодополнение при
+ * наборе "/". Достаточно вызвать один раз при старте — Telegram сохраняет
+ * список на своей стороне.
+ */
+export async function registerBotCommands(bot: Telegraf): Promise<void> {
+  await bot.telegram.setMyCommands([
+    { command: "start", description: "Начать / анкета профиля" },
+    { command: "today", description: "Итоги КБЖУ за сегодня" },
+    { command: "remove", description: "Убрать что-то из съеденного сегодня" },
+    { command: "profile", description: "Профиль и суточная норма" },
+    { command: "subscribe", description: "Подписка" },
+    { command: "cancel", description: "Прервать анкету" },
+  ]);
+}
+
 export function createBot(): Telegraf {
   const env = loadEnv();
   const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
