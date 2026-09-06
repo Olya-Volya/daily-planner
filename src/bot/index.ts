@@ -14,7 +14,6 @@ import {
 } from "./handlers/subscription.js";
 import { cancelOnboarding, handleOnboardingCallback, handleOnboardingText } from "./handlers/onboarding.js";
 import { handleTextMeal } from "./handlers/text.js";
-import { handleRecipesCommand, handleSaveRecipeCallback } from "./handlers/recipes.js";
 import { ensureAccessOrPaywall } from "./middlewares/subscriptionGuard.js";
 import type { SubscriptionPlan } from "@prisma/client";
 
@@ -54,10 +53,6 @@ export function createBot(): Telegraf {
     await handleSubscribeCommand(ctx);
   });
 
-  bot.command("recipes", async (ctx) => {
-    await handleRecipesCommand(ctx, (ctx as any).dbUser);
-  });
-
   bot.command("cancel", async (ctx) => {
     const user = (ctx as any).dbUser;
     const handled = await cancelOnboarding(ctx, user.id);
@@ -75,12 +70,6 @@ export function createBot(): Telegraf {
     if (data.startsWith("subscribe:")) {
       const plan = data.split(":")[1] as SubscriptionPlan;
       await handlePlanSelection(ctx, user.id, plan);
-      return;
-    }
-
-    if (data.startsWith("save_recipe:")) {
-      const recipeId = data.slice("save_recipe:".length);
-      await handleSaveRecipeCallback(ctx, user, recipeId);
       return;
     }
 

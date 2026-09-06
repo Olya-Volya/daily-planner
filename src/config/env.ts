@@ -26,6 +26,14 @@ const envSchema = z.object({
     .default("false")
     .transform((v) => v.toLowerCase() === "true"),
 
+  // Пейволл временно отключён — все функции бесплатны, пока не решено, когда
+  // включать монетизацию. Инфраструктура подписок (/subscribe, Telegram
+  // Payments, триал) остаётся в коде и включается обратно этим флагом.
+  PAYWALL_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase() === "true"),
+
   TRIAL_DAYS: z.coerce.number().int().positive().default(3),
   TRIAL_MAX_RECOGNITIONS: z.coerce.number().int().positive().default(10),
 

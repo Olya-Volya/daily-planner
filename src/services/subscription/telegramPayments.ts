@@ -15,19 +15,19 @@ export function getPlanDefinitions(): PlanDefinition[] {
     {
       plan: "MONTH",
       title: "Подписка на 1 месяц",
-      description: "Безлимитный учёт КБЖУ по голосу и генерация меню по фото холодильника на 30 дней",
+      description: "Безлимитный учёт КБЖУ по голосу, тексту и фото на 30 дней",
       amountMinorUnits: env.PRICE_MONTH,
     },
     {
       plan: "QUARTER",
       title: "Подписка на 3 месяца",
-      description: "Безлимитный учёт КБЖУ по голосу и генерация меню по фото холодильника на 90 дней",
+      description: "Безлимитный учёт КБЖУ по голосу, тексту и фото на 90 дней",
       amountMinorUnits: env.PRICE_QUARTER,
     },
     {
       plan: "YEAR",
       title: "Подписка на 1 год",
-      description: "Безлимитный учёт КБЖУ по голосу и генерация меню по фото холодильника на 365 дней",
+      description: "Безлимитный учёт КБЖУ по голосу, тексту и фото на 365 дней",
       amountMinorUnits: env.PRICE_YEAR,
     },
   ];

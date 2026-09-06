@@ -1,5 +1,5 @@
 // КБЖУ Трекер и Помощник Питания — схема данных
-// Пользователи, история приёмов пищи, подписки/оплаты, сохранённые рецепты.
+// Пользователи, история приёмов пищи, подписки/оплаты.
 
 generator client {
   provider = "prisma-client-js"
@@ -32,6 +32,7 @@ enum Goal {
 enum MealSource {
   VOICE
   TEXT
+  PHOTO
   MANUAL
 }
 
@@ -102,7 +103,6 @@ model User {
   meals                  MealEntry[]
   subscriptions          Subscription[]
   payments               Payment[]
-  recipes                SavedRecipe[]
 
   @@map("users")
 }
@@ -112,7 +112,7 @@ model MealEntry {
   userId        BigInt
   user          User       @relation(fields: [userId], references: [id])
   source        MealSource
-  rawTranscript String? // распознанный текст голосового сообщения
+  rawTranscript String? // распознанный текст (голос/текст) либо название блюда, распознанное по фото
   eatenAt       DateTime   @default(now())
   createdAt     DateTime   @default(now())
 
@@ -181,20 +181,4 @@ model Payment {
   createdAt               DateTime         @default(now())
 
   @@map("payments")
-}
-
-model SavedRecipe {
-  id              String   @id @default(cuid())
-  userId          BigInt
-  user            User     @relation(fields: [userId], references: [id])
-  title           String
-  ingredientsJson Json // [{ name, grams }]
-  steps           String
-  calories        Float
-  protein         Float
-  fat             Float
-  carbs           Float
-  createdAt       DateTime @default(now())
-
-  @@map("saved_recipes")
 }

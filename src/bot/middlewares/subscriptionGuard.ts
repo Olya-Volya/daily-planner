@@ -10,9 +10,15 @@ import { subscriptionPlansKeyboard } from "../keyboards.js";
  * Проверяет доступ к платной функции (голос/фото) перед её выполнением.
  * Если доступ есть — увеличивает счётчик использованных распознаваний триала
  * (если подписки ещё нет) и возвращает true. Иначе показывает пейволл и false.
+ *
+ * Пока PAYWALL_ENABLED=false (см. src/config/env.ts) — доступ открыт всем без
+ * ограничений, счётчик триала не расходуется. Вся остальная инфраструктура
+ * подписок при этом продолжает работать как обычно.
  */
 export async function ensureAccessOrPaywall(ctx: Context, user: User): Promise<boolean> {
   const env = loadEnv();
+  if (!env.PAYWALL_ENABLED) return true;
+
   const subscription = await getActiveSubscription(user.id);
 
   const access = checkAccess(
@@ -25,7 +31,7 @@ export async function ensureAccessOrPaywall(ctx: Context, user: User): Promise<b
   if (!access.allowed) {
     await ctx.reply(
       "Пробный период закончился 😔\n\n" +
-        "Оформи подписку, чтобы продолжить пользоваться распознаванием КБЖУ по голосу и генерацией меню по фото:",
+        "Оформи подписку, чтобы продолжить пользоваться распознаванием КБЖУ по голосу, тексту и фото:",
       subscriptionPlansKeyboard(),
     );
     return false;

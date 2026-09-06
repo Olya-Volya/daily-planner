@@ -6,25 +6,26 @@ import { calculateMealTotals, calculateRemainingBudget } from "../../services/ca
 import { saveMealEntry, getTodayTotals } from "../../db/repositories/mealRepository.js";
 import { logger } from "../../utils/logger.js";
 import { formatDailyRemaining, formatMealSummary } from "../formatters.js";
+import type { ParsedMeal } from "../../types/nutrition.js";
 
 const resolver = new NutritionResolver();
 
 /**
- * Общий хвост конвейера "текст о приёме пищи -> точное КБЖУ", используемый
- * и голосовым, и текстовым обработчиком (после голоса текст уже получен
- * транскрибацией Whisper, для обычного текстового сообщения это сам текст
- * пользователя). Здесь и Claude-парсинг, и программный пересчёт, и сохранение,
- * и формирование ответа — один путь для обоих источников ввода.
+ * Общий хвост конвейера "распознанные ингредиенты -> точное КБЖУ", используемый
+ * голосовым, текстовым и фото-обработчиками независимо от того, как именно
+ * ингредиенты были извлечены (Whisper+Claude, просто текст, или Claude Vision
+ * по фото блюда). Здесь и поиск нутриентов, и программный пересчёт на вес,
+ * и сохранение, и формирование ответа — один путь для всех источников ввода.
  */
-export async function processMealTranscript(
+export async function processParsedMeal(
   ctx: Context,
   user: User,
-  transcript: string,
+  parsedMeal: ParsedMeal,
   source: MealSource,
+  rawTranscript?: string,
 ): Promise<void> {
-  const parsedMeal = await parseMealFromText(transcript);
   if (parsedMeal.items.length === 0) {
-    await ctx.reply("Не смог найти в сообщении конкретные продукты. Попробуй сформулировать иначе.");
+    await ctx.reply("Не смог найти конкретные продукты. Попробуй сформулировать иначе или прислать более чёткое фото.");
     return;
   }
 
@@ -34,7 +35,7 @@ export async function processMealTranscript(
   await saveMealEntry({
     userId: user.id,
     source,
-    rawTranscript: transcript,
+    rawTranscript,
     items: calculatedItems,
   });
 
@@ -56,6 +57,17 @@ export async function processMealTranscript(
   }
 
   await ctx.reply(reply);
+}
+
+/** Голосовой/текстовый ввод: сначала Claude разбирает фразу на ингредиенты, дальше — общий конвейер. */
+export async function processMealTranscript(
+  ctx: Context,
+  user: User,
+  transcript: string,
+  source: MealSource,
+): Promise<void> {
+  const parsedMeal = await parseMealFromText(transcript);
+  await processParsedMeal(ctx, user, parsedMeal, source, transcript);
 }
 
 export function logMealProcessingError(err: unknown, user: User, stage: string): void {

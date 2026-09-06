@@ -1,20 +1,15 @@
-import { Markup, type Context } from "telegraf";
+import type { Context } from "telegraf";
 import type { User } from "@prisma/client";
-import { MenuService } from "../../services/menu/menuService.js";
-import { calculateRemainingBudget } from "../../services/calculation/nutrientCalculator.js";
-import { getTodayTotals } from "../../db/repositories/mealRepository.js";
-import { logger } from "../../utils/logger.js";
-import type { FridgeImage } from "../../services/llm/analyzeFridgePhoto.js";
-import { cacheRecipe } from "../recipeCache.js";
+import { analyzeDishPhoto, type DishImage } from "../../services/llm/analyzeDishPhoto.js";
+import { logMealProcessingError, processParsedMeal } from "./mealProcessing.js";
 
-const menuService = new MenuService();
-
-// Пользователь может прислать несколько фото холодильника одним альбомом
-// (одинаковый media_group_id). Telegram доставляет их отдельными апдейтами,
-// поэтому собираем их в буфер и обрабатываем все вместе с небольшим дебаунсом.
+// Пользователь может прислать несколько фото одного блюда одним альбомом
+// (одинаковый media_group_id, например ракурсы одной тарелки). Telegram
+// доставляет их отдельными апдейтами, поэтому собираем в буфер и разбираем
+// все вместе с небольшим дебаунсом.
 const MEDIA_GROUP_DEBOUNCE_MS = 1500;
 interface PendingGroup {
-  images: FridgeImage[];
+  images: DishImage[];
   ctx: Context;
   user: User;
   timer: ReturnType<typeof setTimeout>;
@@ -31,12 +26,12 @@ export async function handlePhotoMessage(ctx: Context, user: User): Promise<void
   const fileLink = await ctx.telegram.getFileLink(largestPhoto.file_id);
   const response = await fetch(fileLink.toString());
   const buffer = Buffer.from(await response.arrayBuffer());
-  const image: FridgeImage = { base64: buffer.toString("base64"), mediaType: "image/jpeg" };
+  const image: DishImage = { base64: buffer.toString("base64"), mediaType: "image/jpeg" };
 
   const mediaGroupId = "media_group_id" in message ? (message.media_group_id as string | undefined) : undefined;
 
   if (!mediaGroupId) {
-    await processFridgePhotos(ctx, user, [image]);
+    await processDishPhotos(ctx, user, [image]);
     return;
   }
 
@@ -56,65 +51,38 @@ function finalizeGroup(mediaGroupId: string): void {
   const group = pendingGroups.get(mediaGroupId);
   if (!group) return;
   pendingGroups.delete(mediaGroupId);
-  void processFridgePhotos(group.ctx, group.user, group.images);
+  void processDishPhotos(group.ctx, group.user, group.images);
 }
 
-async function processFridgePhotos(ctx: Context, user: User, images: FridgeImage[]): Promise<void> {
-  const statusMessage = await ctx.reply("🧊 Анализирую содержимое холодильника...");
+/**
+ * Распознавание КБЖУ блюда/продукта по фото: Claude Vision определяет состав
+ * и вес порций (по визуальным ориентирам), дальше — тот же конвейер точного
+ * расчёта, что и для голоса/текста (NutritionResolver + nutrientCalculator).
+ */
+async function processDishPhotos(ctx: Context, user: User, images: DishImage[]): Promise<void> {
+  const statusMessage = await ctx.reply("📸 Распознаю блюдо на фото...");
 
   try {
-    const todayTotals = await getTodayTotals(user.id);
-    const remainingBudget = calculateRemainingBudget({
-      target: {
-        calories: user.dailyCalorieTarget ?? 2000,
-        proteinG: user.dailyProteinTargetG ?? 100,
-        fatG: user.dailyFatTargetG ?? 60,
-        carbsG: user.dailyCarbTargetG ?? 200,
-      },
-      consumed: todayTotals,
-    });
+    const analysis = await analyzeDishPhoto(images);
 
-    const recipes = await menuService.generateMenuFromFridgePhoto(images, remainingBudget);
-
-    if (recipes.length === 0) {
-      await ctx.reply("Не удалось предложить блюда по этому фото. Попробуй сфотографировать продукты чётче.");
+    if (analysis.meal.items.length === 0) {
+      await ctx.reply("Не удалось распознать еду на фото. Попробуй сфотографировать блюдо чётче и ближе.");
       return;
     }
 
-    await ctx.telegram.editMessageText(
-      ctx.chat!.id,
-      statusMessage.message_id,
-      undefined,
-      `Нашёл ${recipes.length} вариант(а) блюда. Отправляю рецепты...`,
-    );
+    await ctx.telegram
+      .editMessageText(
+        ctx.chat!.id,
+        statusMessage.message_id,
+        undefined,
+        `📝 Похоже на: ${analysis.title ?? "блюдо с фото"}\n\nСчитаю КБЖУ...`,
+      )
+      .catch(() => undefined);
 
-    for (const recipe of recipes) {
-      const ingredientLines = recipe.items
-        .map((i) => `  • ${i.matchedName} — ${i.quantityGrams} г`)
-        .join("\n");
-      const stepLines = recipe.steps.map((s, idx) => `${idx + 1}. ${s}`).join("\n");
-
-      const text = [
-        `🍳 ${recipe.title}`,
-        "",
-        "Ингредиенты:",
-        ingredientLines,
-        "",
-        "Приготовление:",
-        stepLines,
-        "",
-        `КБЖУ блюда: ${recipe.totals.calories} ккал, ` +
-          `Б${recipe.totals.proteinG}/Ж${recipe.totals.fatG}/У${recipe.totals.carbsG} г`,
-      ].join("\n");
-
-      const recipeId = cacheRecipe(user.id, recipe);
-      await ctx.reply(
-        text,
-        Markup.inlineKeyboard([Markup.button.callback("💾 Сохранить рецепт", `save_recipe:${recipeId}`)]),
-      );
-    }
+    await processParsedMeal(ctx, user, analysis.meal, "PHOTO", analysis.title ?? undefined);
+    await ctx.reply("⚠️ Вес порций на фото оценён приблизительно — для точного учёта используй голосовой/текстовый ввод.");
   } catch (err) {
-    logger.error({ err, userId: user.id.toString() }, "Failed to process fridge photo(s)");
+    logMealProcessingError(err, user, "photo");
     await ctx.reply("Произошла ошибка при анализе фото. Попробуй ещё раз чуть позже.");
   }
 }

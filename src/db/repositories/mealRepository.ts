@@ -1,9 +1,10 @@
+import type { MealSource } from "@prisma/client";
 import { getPrismaClient } from "../prismaClient.js";
 import type { CalculatedMealItem, MealTotals } from "../../types/nutrition.js";
 
 export async function saveMealEntry(params: {
   userId: bigint;
-  source: "VOICE" | "TEXT" | "MANUAL";
+  source: MealSource;
   rawTranscript?: string;
   items: CalculatedMealItem[];
 }) {
