@@ -27,9 +27,34 @@ const NUTRIENT_NAMES = {
   carbs: "Carbohydrate, by difference",
 };
 
+const KJ_TO_KCAL = 1 / 4.184;
+
 function extractNutrient(food: FdcFood, name: string): number | undefined {
   const match = food.foodNutrients.find((n) => n.nutrientName === name);
   return match?.value;
+}
+
+/**
+ * FDC часто отдаёт "Energy" ДВУМЯ отдельными записями с одинаковым
+ * nutrientName — одна в KCAL, другая в kJ. Если брать первую попавшуюся без
+ * проверки unitName, можно случайно взять значение в килоджоулях как
+ * килокалории — калорийность окажется завышена примерно в 4.184 раза.
+ * Поэтому энергию извлекаем отдельной функцией, явно приоритизируя KCAL.
+ */
+function extractEnergyKcal(food: FdcFood): number | undefined {
+  const kcalMatch = food.foodNutrients.find(
+    (n) => n.nutrientName === "Energy" && n.unitName?.toUpperCase() === "KCAL",
+  );
+  if (kcalMatch) return kcalMatch.value;
+
+  const kjMatch = food.foodNutrients.find(
+    (n) => n.nutrientName === "Energy" && n.unitName?.toUpperCase() === "KJ",
+  );
+  if (kjMatch) return kjMatch.value * KJ_TO_KCAL;
+
+  // Фолбэк на случай нестандартного unitName — лучше взять хоть что-то,
+  // чем совсем ничего, но это уже маловероятный путь.
+  return extractNutrient(food, NUTRIENT_NAMES.calories);
 }
 
 /**
@@ -63,7 +88,7 @@ export class UsdaClient {
     const food = data.foods?.[0];
     if (!food) return null;
 
-    const calories = extractNutrient(food, NUTRIENT_NAMES.calories);
+    const calories = extractEnergyKcal(food);
     const protein = extractNutrient(food, NUTRIENT_NAMES.protein);
     const fat = extractNutrient(food, NUTRIENT_NAMES.fat);
     const carbs = extractNutrient(food, NUTRIENT_NAMES.carbs);
