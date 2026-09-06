@@ -43,6 +43,13 @@ const envSchema = z.object({
   CURRENCY: z.string().default("RUB"),
 
   LOG_LEVEL: z.string().default("info"),
+
+  // Порт для служебного HTTP health-check сервера (см. src/healthServer.ts).
+  // Бот сам по себе работает через long polling и HTTP не принимает — этот
+  // порт нужен только чтобы платформа деплоя (напр. Amvera) видела, что
+  // контейнер "слушает" и не перезапускала его. 80 — стандартный порт,
+  // с которым Amvera предлагает деплоить приложение по умолчанию.
+  PORT: z.coerce.number().int().positive().default(80),
 });
 
 export type Env = z.infer<typeof envSchema>;
