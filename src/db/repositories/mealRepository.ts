@@ -37,14 +37,18 @@ export async function saveMealEntry(params: {
   });
 }
 
+function startOfToday(): Date {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  return startOfDay;
+}
+
 /** Суммарное КБЖУ пользователя за текущие сутки (по локальному времени сервера). */
 export async function getTodayTotals(userId: bigint): Promise<MealTotals> {
   const prisma = getPrismaClient();
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
 
   const items = await prisma.mealItem.findMany({
-    where: { mealEntry: { userId, eatenAt: { gte: startOfDay } } },
+    where: { mealEntry: { userId, eatenAt: { gte: startOfToday() } } },
   });
 
   const totals = items.reduce(
@@ -58,4 +62,26 @@ export async function getTodayTotals(userId: bigint): Promise<MealTotals> {
   );
 
   return { ...totals, itemCount: items.length };
+}
+
+/** Позиции, съеденные сегодня — для показа списка с возможностью удалить лишнее. */
+export async function getTodayItems(userId: bigint) {
+  const prisma = getPrismaClient();
+  return prisma.mealItem.findMany({
+    where: { mealEntry: { userId, eatenAt: { gte: startOfToday() } } },
+    orderBy: { mealEntry: { eatenAt: "asc" } },
+  });
+}
+
+/**
+ * Удаляет одну позицию, только если она действительно принадлежит этому
+ * пользователю (проверяем через связанный MealEntry.userId, а не доверяем
+ * голому id из callback-данных). Возвращает true, если что-то удалено.
+ */
+export async function deleteMealItemForUser(userId: bigint, itemId: string): Promise<boolean> {
+  const prisma = getPrismaClient();
+  const result = await prisma.mealItem.deleteMany({
+    where: { id: itemId, mealEntry: { userId } },
+  });
+  return result.count > 0;
 }

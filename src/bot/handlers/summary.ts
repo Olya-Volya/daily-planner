@@ -10,7 +10,8 @@ export async function handleTodayCommand(ctx: Context, user: User): Promise<void
   if (!user.dailyCalorieTarget) {
     await ctx.reply(
       `За сегодня: ${todayTotals.calories} ккал, Б${todayTotals.proteinG}/Ж${todayTotals.fatG}/У${todayTotals.carbsG} г\n\n` +
-        "Заполни профиль (/start), чтобы видеть остаток суточной нормы.",
+        "Заполни профиль (/start), чтобы видеть остаток суточной нормы.\n\n" +
+        "Если что-то нужно убрать из съеденного — команда /remove.",
     );
     return;
   }

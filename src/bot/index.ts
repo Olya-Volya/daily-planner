@@ -14,6 +14,7 @@ import {
 } from "./handlers/subscription.js";
 import { cancelOnboarding, handleOnboardingCallback, handleOnboardingText } from "./handlers/onboarding.js";
 import { handleTextMeal } from "./handlers/text.js";
+import { handleDeleteItemCallback, isDeleteItemCallback, sendTodayItemsList } from "./handlers/editItems.js";
 import { ensureAccessOrPaywall } from "./middlewares/subscriptionGuard.js";
 import type { SubscriptionPlan } from "@prisma/client";
 
@@ -45,6 +46,10 @@ export function createBot(): Telegraf {
     await handleTodayCommand(ctx, (ctx as any).dbUser);
   });
 
+  bot.command("remove", async (ctx) => {
+    await sendTodayItemsList(ctx, (ctx as any).dbUser);
+  });
+
   bot.command("profile", async (ctx) => {
     await handleProfileCommand(ctx, (ctx as any).dbUser);
   });
@@ -70,6 +75,11 @@ export function createBot(): Telegraf {
     if (data.startsWith("subscribe:")) {
       const plan = data.split(":")[1] as SubscriptionPlan;
       await handlePlanSelection(ctx, user.id, plan);
+      return;
+    }
+
+    if (isDeleteItemCallback(data)) {
+      await handleDeleteItemCallback(ctx, user, data);
       return;
     }
 

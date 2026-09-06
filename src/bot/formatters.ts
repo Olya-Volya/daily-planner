@@ -1,6 +1,6 @@
 import type { CalculatedMealItem, MealTotals, NutrientsPer100g } from "../types/nutrition.js";
 
-function fmt(n: number): string {
+export function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
